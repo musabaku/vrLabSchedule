@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Booking Schedule</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        /* Custom styles for better UI feedback and animations */
+        .slot-btn {
+            transition: all 0.2s ease-in-out;
+        }
+        .slot-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .admin-panel {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .modal-enter {
+            animation: fadeIn 0.3s ease-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">Booking Schedule</h1>
+            <p class="text-gray-600 mt-2">Admin can set available times. Everyone can see the status in real-time.</p>
+        </header>
+
+        <!-- Admin Panel -->
+        <div class="bg-white p-6 rounded-2xl mb-8 admin-panel border border-gray-200">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-3">Admin Controls</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                <div>
+                    <label for="scheduleDate" class="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                    <input type="date" id="scheduleDate" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="startTime" class="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+                    <input type="time" id="startTime" step="900" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+                <div>
+                    <label for="endTime" class="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+                    <input type="time" id="endTime" step="900" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                </div>
+            </div>
+            <div class="mt-4">
+                <button id="generateSlots" class="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                    Generate & Save Slots
+                </button>
+            </div>
+        </div>
+
+        <!-- Public Viewing Area -->
+        <div>
+            <h2 class="text-2xl font-semibold mb-4 text-center text-gray-800">Available Slots for <span id="displayDate" class="text-indigo-600">Today</span></h2>
+             <div id="loading" class="text-center text-gray-500 py-4">Loading slots...</div>
+            <div id="publicSlotsContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <!-- Slots will be dynamically inserted here -->
+            </div>
+             <div id="noSlotsMessage" class="hidden text-center bg-gray-100 p-6 rounded-lg">
+                <p class="text-gray-600">No slots have been set for this date yet. Please select a date to view or generate new slots in the admin panel.</p>
+            </div>
+        </div>
+        
+        <!-- User ID Display -->
+        <div class="text-center mt-8 p-4 bg-gray-100 rounded-lg">
+            <p class="text-sm text-gray-600">Your User ID (for collaboration):</p>
+            <p id="userId" class="text-md font-mono bg-white p-2 rounded-md inline-block mt-1 shadow-sm"></p>
+        </div>
+
+    </div>
+
+    <!-- Custom Alert Modal -->
+    <div id="customAlert" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+        <div class="relative mx-auto p-5 border w-full max-w-sm shadow-lg rounded-2xl bg-white modal-enter">
+            <div class="mt-3 text-center">
+                <h3 id="alertTitle" class="text-lg leading-6 font-medium text-gray-900">Notification</h3>
+                <div class="mt-2 px-7 py-3">
+                    <p id="alertMessage" class="text-sm text-gray-500"></p>
+                </div>
+                <div class="items-center px-4 py-3">
+                    <button id="closeAlert" class="px-4 py-2 bg-indigo-600 text-white text-base font-medium rounded-lg w-full shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password Modal -->
+    <div id="passwordModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
+        <div class="relative mx-auto p-5 border w-full max-w-sm shadow-lg rounded-2xl bg-white modal-enter">
+            <div class="mt-3 text-center">
+                <h3 class="text-lg leading-6 font-medium text-gray-900">Admin Action</h3>
+                <p class="text-sm text-gray-500 mt-2 px-4">Please enter the admin password to proceed.</p>
+                <div class="mt-4 px-4">
+                    <input type="password" id="passwordInput" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" placeholder="Password...">
+                </div>
+                <div class="flex items-center justify-end px-4 py-3 gap-2">
+                    <button id="cancelPassword" class="px-4 py-2 bg-gray-200 text-gray-800 text-base font-medium rounded-lg shadow-sm hover:bg-gray-300 focus:outline-none">Cancel</button>
+                    <button id="submitPassword" class="px-4 py-2 bg-indigo-600 text-white text-base font-medium rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none">Submit</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // --- Firebase Configuration ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-booking-app';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : { apiKey: "DEMO_KEY", authDomain: "DEMO.firebaseapp.com", projectId: "DEMO" };
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : undefined;
+
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Firebase Initialization ---
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        let currentUserId = null;
+        let currentScheduleDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD format
+        let slotsUnsubscribe = null; // To hold the listener detachment function
+
+        // --- DOM Elements ---
+        const scheduleDateInput = document.getElementById('scheduleDate');
+        const startTimeInput = document.getElementById('startTime');
+        const endTimeInput = document.getElementById('endTime');
+        const generateSlotsBtn = document.getElementById('generateSlots');
+        const publicSlotsContainer = document.getElementById('publicSlotsContainer');
+        const displayDateElem = document.getElementById('displayDate');
+        const noSlotsMessage = document.getElementById('noSlotsMessage');
+        const loadingDiv = document.getElementById('loading');
+        const userIdElem = document.getElementById('userId');
+        
+        // Modal elements
+        const customAlert = document.getElementById('customAlert');
+        const alertTitle = document.getElementById('alertTitle');
+        const alertMessage = document.getElementById('alertMessage');
+        const closeAlertBtn = document.getElementById('closeAlert');
+        const passwordModal = document.getElementById('passwordModal');
+
+        // --- UI Logic ---
+        function showAlert(message, title = "Notification") {
+            alertTitle.textContent = title;
+            alertMessage.textContent = message;
+            customAlert.classList.remove('hidden');
+        }
+        closeAlertBtn.addEventListener('click', () => customAlert.classList.add('hidden'));
+
+        /**
+         * A promise-based function to get the admin password from a modal.
+         * Replaces the unreliable `prompt()`.
+         * @returns {Promise<string>} Resolves with the password, rejects on cancellation.
+         */
+        function getPassword() {
+            return new Promise((resolve, reject) => {
+                const input = document.getElementById('passwordInput');
+                const submitBtn = document.getElementById('submitPassword');
+                const cancelBtn = document.getElementById('cancelPassword');
+
+                // Use .onclick to ensure we only have one listener at a time
+                submitBtn.onclick = () => {
+                    passwordModal.classList.add('hidden');
+                    resolve(input.value);
+                };
+
+                cancelBtn.onclick = () => {
+                    passwordModal.classList.add('hidden');
+                    reject(new Error("Password entry cancelled."));
+                };
+
+                input.value = ''; // Clear previous entries
+                passwordModal.classList.remove('hidden');
+                input.focus();
+            });
+        }
+
+        function renderSlots(slots) {
+            publicSlotsContainer.innerHTML = '';
+            if (!slots || slots.length === 0) {
+                 noSlotsMessage.classList.remove('hidden');
+                 return;
+            }
+            noSlotsMessage.classList.add('hidden');
+            
+            // Sort slots chronologically before rendering
+            slots.sort((a, b) => a.time.localeCompare(b.time));
+
+            slots.forEach((slot, index) => {
+                const slotEl = document.createElement('button');
+                slotEl.textContent = slot.time;
+                slotEl.dataset.index = index;
+                slotEl.classList.add('p-3', 'rounded-lg', 'text-center', 'font-semibold', 'slot-btn', 'border');
+                if (slot.status === 'booked') {
+                    slotEl.classList.add('bg-red-500', 'text-white', 'hover:bg-red-600', 'border-red-600', 'cursor-not-allowed', 'opacity-75');
+                    slotEl.setAttribute('aria-label', `Slot at ${slot.time} is booked`);
+                } else { // 'available'
+                    slotEl.classList.add('bg-green-500', 'text-white', 'hover:bg-green-600', 'border-green-600');
+                    slotEl.setAttribute('aria-label', `Book slot at ${slot.time}`);
+                }
+                // Pass the entire slots array to handle the update correctly
+                slotEl.addEventListener('click', () => handleSlotClick(index, slots));
+                publicSlotsContainer.appendChild(slotEl);
+            });
+        }
+
+        // --- Core Application Logic ---
+        
+        /**
+         * Attaches a real-time listener to Firestore for the given date.
+         * @param {string} dateString - The date to listen to in YYYY-MM-DD format.
+         */
+        function listenForScheduleChanges(dateString) {
+            if (slotsUnsubscribe) {
+                slotsUnsubscribe(); // Detach the old listener to prevent memory leaks
+            }
+            
+            currentScheduleDate = dateString;
+            // Adding T00:00:00 prevents timezone-related date shifts when creating the Date object
+            const displayDate = new Date(dateString + 'T00:00:00');
+            displayDateElem.textContent = displayDate.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+            loadingDiv.style.display = 'block';
+            publicSlotsContainer.innerHTML = '';
+            noSlotsMessage.classList.add('hidden');
+            
+            const docRef = doc(db, "artifacts", appId, "public/data/slots", dateString);
+            
+            slotsUnsubscribe = onSnapshot(docRef, (docSnap) => {
+                loadingDiv.style.display = 'none';
+                if (docSnap.exists() && docSnap.data().slots) {
+                    renderSlots(docSnap.data().slots);
+                } else {
+                    // Document doesn't exist or has no slots array, show the message
+                    renderSlots([]); 
+                }
+            }, (error) => {
+                console.error("Error with Firestore listener:", error);
+                loadingDiv.textContent = 'Error loading slots.';
+                showAlert("Could not fetch schedule data. Please check the console.", "Error");
+            });
+        }
+        
+        async function handleSlotClick(index, currentSlots) {
+            if (!currentUserId) return showAlert("You must be authenticated to perform this action.");
+
+            try {
+                const password = await getPassword();
+                if (password !== 'xrvr') {
+                    showAlert("Incorrect password.", "Access Denied");
+                    return;
+                }
+                
+                // Create a deep copy to avoid direct state mutation
+                const newSlots = JSON.parse(JSON.stringify(currentSlots));
+                // Toggle the status of the clicked slot
+                newSlots[index].status = newSlots[index].status === 'available' ? 'booked' : 'available';
+
+                const docRef = doc(db, "artifacts", appId, "public/data/slots", currentScheduleDate);
+                // Use updateDoc to modify the existing document
+                await updateDoc(docRef, { slots: newSlots });
+            } catch (error) {
+                // This will catch cancellation from the password modal and actual Firestore errors
+                if (error.message.includes("Password entry cancelled")) {
+                    console.log("Slot modification cancelled by user.");
+                } else {
+                    console.error("Error updating slot status: ", error);
+                    showAlert("Failed to update slot. Check console for details.");
+                }
+            }
+        }
+
+        async function generateAndSaveSlots() {
+            try {
+                const password = await getPassword();
+                if (password !== 'xrvr') {
+                    showAlert("Incorrect password.", "Access Denied");
+                    return;
+                }
+
+                const date = scheduleDateInput.value;
+                const start = startTimeInput.value;
+                const end = endTimeInput.value;
+
+                if (!date || !start || !end) return showAlert("Please select a date, start time, and end time.", "Input Missing");
+                if (start >= end) return showAlert("Start time must be before end time.", "Invalid Time Range");
+
+                const slots = [];
+                // Use a date object to handle time calculations correctly
+                let currentTime = new Date(`${date}T${start}`);
+                const endTime = new Date(`${date}T${end}`);
+                
+                while (currentTime < endTime) {
+                    slots.push({
+                        time: currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+                        status: 'available'
+                    });
+                    // Increment time by 15 minutes for the next slot
+                    currentTime.setMinutes(currentTime.getMinutes() + 15);
+                }
+
+                const docRef = doc(db, "artifacts", appId, "public/data/slots", date);
+                // Use setDoc to create a new schedule or completely overwrite an existing one for that date
+                await setDoc(docRef, { slots: slots });
+                showAlert(`Successfully generated ${slots.length} slots for ${date}!`);
+                
+                // If the user generated slots for a date they are not currently viewing, switch the view to it.
+                if (date !== currentScheduleDate) {
+                    listenForScheduleChanges(date);
+                }
+
+            } catch (error) {
+                if (error.message.includes("Password entry cancelled")) {
+                    console.log("Slot generation cancelled by user.");
+                } else {
+                    console.error("Error writing document: ", error);
+                    showAlert("Failed to save slots. Check the console for errors.");
+                }
+            }
+        }
+        
+        // --- Initial Setup ---
+        async function setupAuth() {
+            try {
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (error) {
+                console.error("Authentication failed:", error);
+                userIdElem.textContent = 'Authentication Error!';
+            }
+
+            onAuthStateChanged(auth, (user) => {
+                if (user) {
+                    currentUserId = user.uid;
+                    userIdElem.textContent = currentUserId;
+                    console.log("Authenticated with User ID:", currentUserId);
+                    // Initial load for the current date once authenticated
+                    listenForScheduleChanges(currentScheduleDate); 
+                } else {
+                    currentUserId = null;
+                    userIdElem.textContent = 'Not authenticated';
+                    console.log("User is signed out.");
+                    // Clear the view if the user signs out
+                    publicSlotsContainer.innerHTML = '';
+                    noSlotsMessage.classList.remove('hidden');
+                    noSlotsMessage.textContent = 'Please authenticate to view schedules.';
+                }
+            });
+        }
+
+        function setupApp() {
+            // Set default values for the admin panel
+            scheduleDateInput.value = currentScheduleDate;
+            startTimeInput.value = "09:00";
+            endTimeInput.value = "17:00";
+            
+            // Attach event listeners
+            generateSlotsBtn.addEventListener('click', generateAndSaveSlots);
+            scheduleDateInput.addEventListener('change', (e) => listenForScheduleChanges(e.target.value));
+
+            // Start the authentication process
+            setupAuth();
+        }
+
+        // Run the app once the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', setupApp);
+
+    </script>
+</body>
+</html>
